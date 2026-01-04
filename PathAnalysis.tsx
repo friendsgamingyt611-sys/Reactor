@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, TrendingUp, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, TrendingUp, AlertTriangle, ChartArea } from 'lucide-react';
 
 interface Point {
   t: number;
@@ -17,45 +17,58 @@ interface PathAnalysisProps {
 }
 
 const PathAnalysis: React.FC<PathAnalysisProps> = ({ path, points, results, onBack }) => {
-  // Helper to color segments by speed relative to peak speed
   const getVelocityColor = (v: number, maxV: number) => {
     const ratio = Math.min(v / (maxV || 1), 1);
-    // Blue (Slow) -> Red (Fast)
     const r = Math.floor(ratio * 255);
     const b = Math.floor((1 - ratio) * 255);
     return `rgb(${r}, 0, ${b})`;
   };
 
-  // Find max deviation point
+  // --- Deviation Analysis ---
+  
+  // 1. Max Deviation
   let maxDev = 0;
   let maxDevPoint = { x: 0, y: 0 };
-  let closestPointOnLine = { x: 0, y: 0 };
+  
+  // Line params: ax + by + c = 0
+  const L_A = points.a.y - points.b.y;
+  const L_B = points.b.x - points.a.x;
+  const L_C = points.a.x * points.b.y - points.b.x * points.a.y;
+  const lenSq = L_A*L_A + L_B*L_B;
 
-  // Line equation ax + by + c = 0
-  const A = points.a.y - points.b.y;
-  const B = points.b.x - points.a.x;
-  const C = points.a.x * points.b.y - points.b.x * points.a.y;
-  const lenSq = A*A + B*B;
+  path.forEach(p => {
+      const dist = Math.abs(L_A * p.x + L_B * p.y + L_C) / Math.sqrt(lenSq);
+      if (dist > maxDev) {
+          maxDev = dist;
+          maxDevPoint = { x: p.x, y: p.y };
+      }
+  });
 
-  if (path.length > 0 && lenSq > 0) {
-      path.forEach(p => {
-          // Distance from point to line
-          const dist = Math.abs(A * p.x + B * p.y + C) / Math.sqrt(lenSq);
-          if (dist > maxDev) {
-              maxDev = dist;
-              maxDevPoint = { x: p.x, y: p.y };
-              
-              // Calculate projection (closest point on line)
-              const x1 = points.a.x, y1 = points.a.y;
-              const x2 = points.b.x, y2 = points.b.y;
-              const u = ((p.x - x1) * (x2 - x1) + (p.y - y1) * (y2 - y1)) / lenSq;
-              closestPointOnLine = {
-                  x: x1 + u * (x2 - x1),
-                  y: y1 + u * (y2 - y1)
-              };
-          }
-      });
+  // 2. Area Deviation (Shoelace Formula)
+  // Calculate area of polygon formed by Start -> Path -> End -> Start
+  // Since path starts near A and ends near B, we close the loop by connecting last point to first point.
+  // The 'Ideal' area is 0 (straight line). The calculated area is the deviation area.
+  
+  let area = 0;
+  if (path.length > 2) {
+      // Add start point A to the path for calculation if not exactly there
+      const poly = [points.a, ...path, points.b, points.a];
+      
+      let sum = 0;
+      for(let i = 0; i < poly.length - 1; i++) {
+          sum += (poly[i].x * poly[i+1].y) - (poly[i+1].x * poly[i].y);
+      }
+      area = Math.abs(sum) / 2;
   }
+  
+  // Convert px² to meaningful unit (roughly cm² assuming ~160ppi)
+  // 1 inch = 160px. 1cm = 63px. 1cm² = 3969px².
+  const areaCm2 = area / 3969; 
+
+  // SVG Path String for the filled area
+  const svgPathString = `M ${points.a.x} ${points.a.y} ` + 
+                        path.map(p => `L ${p.x} ${p.y}`).join(' ') + 
+                        ` L ${points.b.x} ${points.b.y} Z`;
 
   return (
     <div className="absolute inset-0 bg-[#050505] z-50 flex flex-col">
@@ -67,12 +80,14 @@ const PathAnalysis: React.FC<PathAnalysisProps> = ({ path, points, results, onBa
        </div>
 
        <div className="flex-grow relative overflow-hidden bg-grid-white/[0.02]">
-            {/* Background Grid visual */}
             <div className="absolute inset-0 pointer-events-none" 
                  style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.05) 1px, transparent 0)', backgroundSize: '20px 20px' }}>
             </div>
 
             <svg className="absolute inset-0 w-full h-full">
+                {/* Deviation Area Fill */}
+                <path d={svgPathString} fill="rgba(239, 68, 68, 0.1)" stroke="none" />
+
                 {/* Ideal Line (Dashed) */}
                 <line 
                     x1={points.a.x} y1={points.a.y} 
@@ -82,7 +97,7 @@ const PathAnalysis: React.FC<PathAnalysisProps> = ({ path, points, results, onBa
                     strokeDasharray="6 4" 
                 />
                 
-                {/* Actual Path - Colored by Speed */}
+                {/* Actual Path */}
                 {path.map((p, i) => {
                     if (i === 0) return null;
                     const prev = path[i - 1];
@@ -99,27 +114,18 @@ const PathAnalysis: React.FC<PathAnalysisProps> = ({ path, points, results, onBa
                     );
                 })}
 
-                {/* Deviation Indicator */}
+                {/* Max Deviation Marker */}
                 {maxDev > 0 && (
                     <>
-                        <line 
-                            x1={maxDevPoint.x} y1={maxDevPoint.y}
-                            x2={closestPointOnLine.x} y2={closestPointOnLine.y}
-                            stroke="#ef4444"
-                            strokeWidth="1"
-                            strokeDasharray="2 2"
-                        />
-                         <circle cx={maxDevPoint.x} cy={maxDevPoint.y} r={3} fill="#ef4444" />
-                         <circle cx={closestPointOnLine.x} cy={closestPointOnLine.y} r={3} fill="#ef4444" fillOpacity="0.5" />
+                         <circle cx={maxDevPoint.x} cy={maxDevPoint.y} r={4} fill="none" stroke="#ef4444" strokeWidth="2" />
                     </>
                 )}
 
-                {/* Start/End Markers */}
                 <circle cx={points.a.x} cy={points.a.y} r={4} fill="#3b82f6" />
                 <circle cx={points.b.x} cy={points.b.y} r={4} fill="#ef4444" />
             </svg>
 
-            {/* Analysis Overlay Label */}
+            {/* Labels */}
             {maxDev > 0 && (
                 <div 
                     className="absolute bg-black/80 border border-red-500/50 rounded px-2 py-1 text-[8px] text-red-400 font-mono"
@@ -130,7 +136,6 @@ const PathAnalysis: React.FC<PathAnalysisProps> = ({ path, points, results, onBa
             )}
        </div>
 
-       {/* Legend / Key */}
        <div className="p-4 bg-black/80 border-t border-white/10 grid grid-cols-2 gap-4">
            <div>
                <p className="text-[9px] text-slate-500 uppercase font-black mb-2 flex items-center gap-1">
@@ -152,8 +157,11 @@ const PathAnalysis: React.FC<PathAnalysisProps> = ({ path, points, results, onBa
                     <span className="text-purple-400">{results.pathEfficiency.toFixed(1)}%</span>
                 </div>
                 <div className="flex justify-between text-[9px] font-mono text-slate-300 mt-1">
-                    <span>Max Deviation:</span>
-                    <span className="text-red-400">{Math.round(maxDev)}px</span>
+                    <span>Deviation Area:</span>
+                    <span className="text-red-400 flex items-center gap-1">
+                        <ChartArea size={8} />
+                        {areaCm2.toFixed(2)} cm²
+                    </span>
                 </div>
            </div>
        </div>

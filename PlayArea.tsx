@@ -45,33 +45,26 @@ const PlayArea: React.FC<PlayAreaProps> = ({
   };
 
   // --- REPLAY LOGIC ---
-  // Filter path based on current replayTime
   const replayData = useMemo(() => {
     if (gameState !== 'replay') return null;
 
     const absReplayTime = goTime + replayTime;
     
-    // 1. Determine Cursor Position
-    let cursor = { x: points.a.x, y: points.a.y };
-    
-    // Find where we are
-    // If replayTime is 0, we are at A. 
-    // We only start moving when path points exist after goTime.
-    
-    // Filter points that have already occurred
+    // Determine which points have happened by this time
     const visiblePoints = path.filter(p => p.t <= absReplayTime);
     
-    if (visiblePoints.length > 0) {
-        cursor = { x: visiblePoints[visiblePoints.length-1].x, y: visiblePoints[visiblePoints.length-1].y };
-        
-        // Interpolate for smoothness between the last visible point and the next invisible one
-        // (Optional enhancement, sticking to raw point clamping for "real data" feel)
-    } else {
-        // We are in reaction time dead zone, stick to A
-        cursor = { x: points.a.x, y: points.a.y };
-    }
+    // Determine Cursor Position
+    let cursor = { x: points.a.x, y: points.a.y };
+    let isReactionPhase = true;
 
-    return { visiblePoints, cursor };
+    if (visiblePoints.length > 0) {
+        // We have started moving
+        cursor = { x: visiblePoints[visiblePoints.length-1].x, y: visiblePoints[visiblePoints.length-1].y };
+        isReactionPhase = false;
+    } 
+    // If no points are visible yet, we are in reaction delay. Cursor stays at A.
+
+    return { visiblePoints, cursor, isReactionPhase };
   }, [gameState, replayTime, goTime, path, points]);
 
 
@@ -95,12 +88,12 @@ const PlayArea: React.FC<PlayAreaProps> = ({
         </div>
       </div>
 
-      {/* Target B - Replay Logic: Spawns at t=0 */}
+      {/* Target B - Always visible in Replay/Results */}
       <div 
         className={`absolute w-16 h-16 -ml-8 -mt-8 rounded-full border-2 border-red-500/80 flex items-center justify-center transition-all duration-0 
         ${gameState === 'active' || gameState === 'analysis' ? 'opacity-100 scale-100' : ''}
-        ${gameState === 'replay' ? (replayTime >= 0 ? 'opacity-100 scale-100' : 'opacity-0 scale-0') : ''}
-        ${gameState === 'idle' || gameState === 'holding' || gameState === 'results' ? 'opacity-0 scale-0' : ''}
+        ${gameState === 'replay' || gameState === 'results' ? 'opacity-100 scale-100' : ''}
+        ${gameState === 'idle' || gameState === 'holding' ? 'opacity-0 scale-0' : ''}
         shadow-[0_0_30px_rgba(239,68,68,0.6)]`}
         style={{ left: points.b.x, top: points.b.y }}
       >
@@ -152,17 +145,22 @@ const PlayArea: React.FC<PlayAreaProps> = ({
                             x1={prev.x} y1={prev.y}
                             x2={p.x} y2={p.y}
                             stroke={getVelocityColor(p.v, results.peakV)}
-                            strokeWidth={2 + (p.v * 8)}
+                            strokeWidth={3 + (p.v * 6)} 
                             strokeLinecap="round"
-                            opacity={0.9}
+                            opacity={1}
                         />
                       );
                   })}
-
-                  {/* Cursor */}
-                  <circle cx={replayData.cursor.x} cy={replayData.cursor.y} r={12} fill="rgba(0, 255, 255, 0.3)" className="blur-md" />
-                  <circle cx={replayData.cursor.x} cy={replayData.cursor.y} r={6} fill="white" className="shadow-[0_0_10px_rgba(255,255,255,0.8)]" />
               </svg>
+
+              {/* Cursor / Finger Indicator */}
+              <div 
+                className="absolute w-6 h-6 -ml-3 -mt-3 pointer-events-none z-50 transition-transform duration-75 ease-linear"
+                style={{ left: replayData.cursor.x, top: replayData.cursor.y }}
+              >
+                  <div className={`absolute inset-0 bg-cyan-400 rounded-full blur-md ${replayData.isReactionPhase ? 'opacity-20 animate-pulse scale-150' : 'opacity-60 scale-100'}`}></div>
+                  <div className="absolute inset-1 bg-white rounded-full shadow-[0_0_10px_rgba(255,255,255,1)]"></div>
+              </div>
           </>
       )}
     </div>

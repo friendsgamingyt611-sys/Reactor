@@ -341,13 +341,8 @@ const App = () => {
 
       setReplayTime(prev => {
         let next = prev + (delta * replaySpeed);
-        // Auto-loop with a small pause effect could be added here, but simple loop for now
+        // Loop logic
         if (next >= replayDuration) {
-           // For a player feel, maybe pause at end? Or Loop. 
-           // User said "recreates animations", often loops are better for analysis.
-           // But let's Pause at end so they can see the final state.
-           // Actually, loop is better for "visualizing". 
-           // Let's loop.
            next = 0;
         }
         return next;
@@ -363,8 +358,6 @@ const App = () => {
   // Handle Scrubbing
   const handleSeek = (time: number) => {
       setReplayTime(time);
-      // Optional: Pause when seeking?
-      // setIsPlaying(false); 
   };
 
   return (
@@ -383,12 +376,12 @@ const App = () => {
         isHoldingA={isHoldingA}
         path={path.current}
         results={results}
-        // Replay specific props
         replayTime={replayTime}
         goTime={goTimeRef.current}
       />
 
-      {(gameState === 'results' || gameState === 'replay') && results && (
+      {/* CHANGED: Only show ResultsDashboard when state is 'results'. Hides during replay. */}
+      {gameState === 'results' && results && (
           <ResultsDashboard 
             results={results}
             analysis={analysis}

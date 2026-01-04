@@ -1,10 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { GoogleGenAI } from "@google/genai";
+import { AlertTriangle, RotateCcw } from 'lucide-react';
 import Header from './Header';
 import PlayArea from './PlayArea';
 import ResultsDashboard from './ResultsDashboard';
 import ReplayOverlay from './ReplayOverlay';
 import PathAnalysis from './PathAnalysis';
+import InfoSection from './InfoSection';
+import TutorialOverlay from './TutorialOverlay';
 
 // --- Types ---
 interface Point {
@@ -34,7 +37,9 @@ interface BiometricAnalysis {
 
 // --- App Component ---
 const App = () => {
-  const [gameState, setGameState] = useState<'idle' | 'holding' | 'active' | 'results' | 'replay' | 'analysis'>('idle'); 
+  const [gameState, setGameState] = useState<'idle' | 'holding' | 'active' | 'results' | 'replay' | 'analysis' | 'failed'>('idle'); 
+  const [failReason, setFailReason] = useState<string>('');
+  
   const [points, setPoints] = useState({ a: { x: 0, y: 0 }, b: { x: 0, y: 0 } });
   const [results, setResults] = useState<Results | null>(null);
   const [isHoldingA, setIsHoldingA] = useState(false);
@@ -53,6 +58,10 @@ const App = () => {
   const [replayTime, setReplayTime] = useState(0); // ms relative to goTime
   const [replayDuration, setReplayDuration] = useState(0);
 
+  // New UI States
+  const [showInfo, setShowInfo] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
+
   const path = useRef<Point[]>([]); 
   const containerRef = useRef<HTMLDivElement>(null);
   const startTimeoutRef = useRef<any>(null); 
@@ -60,8 +69,14 @@ const App = () => {
   const replayFrameRef = useRef<number>(0);
   const lastReplayTimeRef = useRef<number | null>(null);
 
-  // 1. Calibration
+  // 1. Initial Setup & Calibration
   useEffect(() => {
+    // Check for first time visitor
+    const hasSeenTutorial = localStorage.getItem('strikeLab_tutorial_seen');
+    if (!hasSeenTutorial) {
+      setShowTutorial(true);
+    }
+
     const runCalibration = () => {
       const samples = [];
       for (let i = 0; i < 50; i++) {
@@ -85,6 +100,11 @@ const App = () => {
 
     runCalibration();
   }, []);
+
+  const finishTutorial = () => {
+    setShowTutorial(false);
+    localStorage.setItem('strikeLab_tutorial_seen', 'true');
+  };
 
   const getPPM = () => {
     const basePPI = 160; 
@@ -209,13 +229,42 @@ const App = () => {
     }
   };
 
-  const handlePointerUp = () => {
+  const failGame = (reason: string) => {
+      setGameState('failed');
+      setFailReason(reason);
+      setIsHoldingA(false);
+      clearTimeout(startTimeoutRef.current);
+  };
+
+  const handlePointerLeave = () => {
+      if (gameState === 'active' || gameState === 'holding') {
+          failGame("OUT OF BOUNDS");
+      }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
       if (gameState === 'holding') {
           clearTimeout(startTimeoutRef.current);
           setGameState('idle');
       } else if (gameState === 'active') {
-          setGameState('results'); 
-          analyzeResults(); 
+          // Check Hit on B
+          // Target B is drawn as w-16 h-16 (64px). Radius is 32px.
+          // We'll give a slight leniency buffer (45px radius).
+          
+          if (path.current.length === 0) {
+               failGame("NO MOVEMENT DETECTED");
+               return;
+          }
+
+          const lastPoint = path.current[path.current.length - 1];
+          const distToB = Math.sqrt(Math.pow(lastPoint.x - points.b.x, 2) + Math.pow(lastPoint.y - points.b.y, 2));
+          
+          if (distToB > 45) {
+              failGame("MISSED TARGET");
+          } else {
+              setGameState('results'); 
+              analyzeResults(); 
+          }
       }
       setIsHoldingA(false);
   };
@@ -374,13 +423,18 @@ const App = () => {
     <div className="min-h-screen bg-[#050505] text-white flex flex-col font-sans select-none touch-none overflow-hidden relative">
       <div className="scanlines"></div>
       
-      <Header systemOverhead={systemOverhead} deviceInfo={deviceInfo} />
+      <Header 
+        systemOverhead={systemOverhead} 
+        deviceInfo={deviceInfo} 
+        onOpenInfo={() => setShowInfo(true)}
+      />
 
       <PlayArea 
         containerRef={containerRef}
         onPointerDown={startSequence}
         onPointerMove={(e) => gameState === 'active' && processPointerEvent(e)}
         onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerLeave}
         points={points}
         gameState={gameState}
         isHoldingA={isHoldingA}
@@ -390,7 +444,37 @@ const App = () => {
         goTime={goTimeRef.current}
       />
 
-      {/* CHANGED: Only show ResultsDashboard when state is 'results'. Hides during replay. */}
+      {/* --- OVERLAYS --- */}
+      
+      {/* 1. Tutorial (New Users) */}
+      {showTutorial && <TutorialOverlay onComplete={finishTutorial} />}
+
+      {/* 2. Info Section (Manual) */}
+      {showInfo && <InfoSection onClose={() => setShowInfo(false)} />}
+
+      {/* 3. Failure Screen */}
+      {gameState === 'failed' && (
+          <div className="absolute inset-0 bg-red-900/90 backdrop-blur-xl z-50 flex items-center justify-center p-8">
+              <div className="text-center">
+                  <AlertTriangle size={64} className="text-white mx-auto mb-4 animate-bounce" />
+                  <h2 className="text-4xl font-black italic uppercase text-white mb-2">TEST VOID</h2>
+                  <p className="text-red-200 font-mono text-lg mb-8 uppercase tracking-widest border border-red-500/50 p-2 inline-block">
+                     {failReason}
+                  </p>
+                  <p className="text-sm text-red-200/60 max-w-sm mx-auto mb-8">
+                      Fair Play Protocol: You must wait for the target and strike accurately without leaving the sensor area.
+                  </p>
+                  <button 
+                    onClick={reset}
+                    className="bg-white text-red-900 px-8 py-3 rounded-full font-bold uppercase tracking-widest hover:scale-105 transition-transform flex items-center gap-2 mx-auto"
+                  >
+                    <RotateCcw size={16} /> Retry
+                  </button>
+              </div>
+          </div>
+      )}
+
+      {/* 4. Results */}
       {gameState === 'results' && results && (
           <ResultsDashboard 
             results={results}
@@ -404,6 +488,7 @@ const App = () => {
           />
       )}
 
+      {/* 5. Replay */}
       {gameState === 'replay' && results && (
         <ReplayOverlay 
            replayTime={replayTime}
@@ -420,6 +505,7 @@ const App = () => {
         />
       )}
 
+      {/* 6. Analysis */}
       {gameState === 'analysis' && results && (
           <PathAnalysis 
               path={path.current}

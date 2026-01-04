@@ -12,7 +12,8 @@ interface PlayAreaProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
   onPointerDown: (e: React.PointerEvent) => void;
   onPointerMove: (e: React.PointerEvent) => void;
-  onPointerUp: () => void;
+  onPointerUp: (e: React.PointerEvent) => void;
+  onPointerLeave: () => void;
   points: { a: { x: number; y: number }; b: { x: number; y: number } };
   gameState: string;
   isHoldingA: boolean;
@@ -27,6 +28,7 @@ const PlayArea: React.FC<PlayAreaProps> = ({
   onPointerDown,
   onPointerMove,
   onPointerUp,
+  onPointerLeave,
   points,
   gameState,
   isHoldingA,
@@ -74,7 +76,8 @@ const PlayArea: React.FC<PlayAreaProps> = ({
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      className="flex-grow relative overflow-hidden"
+      onPointerLeave={onPointerLeave}
+      className="flex-grow relative overflow-hidden touch-none"
     >
       {/* Origin A - Always visible */}
       <div 

@@ -46,24 +46,26 @@ const App = () => {
   // Replay & Analysis States
   const [analysis, setAnalysis] = useState<BiometricAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [replaySpeed, setReplaySpeed] = useState(1.0); // 1.0 = Normal, 0.1 = Slow
-  const [replayProgress, setReplayProgress] = useState(0); // 0 to 1
-  const [replayTime, setReplayTime] = useState(0); // Current ms in replay
-  const [replayCursor, setReplayCursor] = useState<{x: number, y: number} | null>(null);
+  
+  // Player State
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [replaySpeed, setReplaySpeed] = useState(1.0);
+  const [replayTime, setReplayTime] = useState(0); // ms relative to goTime
+  const [replayDuration, setReplayDuration] = useState(0);
 
   const path = useRef<Point[]>([]); 
   const containerRef = useRef<HTMLDivElement>(null);
-  const startTimeoutRef = useRef<any>(null); // Replaces interval timer
+  const startTimeoutRef = useRef<any>(null); 
   const goTimeRef = useRef(0);
   const replayFrameRef = useRef<number>(0);
+  const lastReplayTimeRef = useRef<number | null>(null);
 
-  // 1. High-Precision Latency Benchmarking (Run Once)
+  // 1. Calibration
   useEffect(() => {
     const runCalibration = () => {
       const samples = [];
       for (let i = 0; i < 50; i++) {
         const t0 = performance.now();
-        // Simulate minor analytical load
         Array.from({length: 100}, (_, i) => Math.sqrt(i));
         const t1 = performance.now();
         samples.push(t1 - t0);
@@ -94,7 +96,6 @@ const App = () => {
     if (!containerRef.current) return;
     const { width, height } = containerRef.current.getBoundingClientRect();
     const ppm = getPPM();
-    
     const padding = 80; 
     
     const ax = Math.max(padding, Math.min(width - padding, width / 2));
@@ -215,7 +216,6 @@ const App = () => {
     
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      
       const prompt = `
         Act as a futuristic cybernetic physiologist. Analyze this reflex test data:
         - Visual Reaction Time: ${res.reactionTime.toFixed(0)}ms
@@ -242,12 +242,6 @@ const App = () => {
       setAnalysis(json);
     } catch (error) {
       console.error("Analysis failed", error);
-      setAnalysis({
-        synapticDelay: "Neural pathway analysis offline.",
-        motorRecruitment: "Signal degradation detected.",
-        muscleFiberType: "Unknown fiber composition.",
-        summary: "Data corruption in bio-link."
-      });
     } finally {
       setIsAnalyzing(false);
     }
@@ -310,85 +304,68 @@ const App = () => {
     setAnalysis(null);
     setIsHoldingA(false);
     path.current = [];
-    setReplayCursor(null);
     setReplayTime(0);
+    setIsPlaying(false);
     generatePoints();
   };
 
-  const startReplay = (speed: number) => {
+  // --- REPLAY ENGINE ---
+  const initReplay = (speed: number) => {
+    if (path.current.length === 0) return;
     setGameState('replay');
     setReplaySpeed(speed);
     
-    if (path.current.length === 0) return;
-
-    const startTime = goTimeRef.current; 
-    const firstMoveTime = path.current[0].t;
+    const startTime = goTimeRef.current;
     const endTime = path.current[path.current.length - 1].t;
+    const duration = endTime - startTime;
+    setReplayDuration(duration);
     
-    const totalDuration = endTime - startTime;
-    
-    let startTimestamp: number | null = null;
-
-    const animate = (timestamp: number) => {
-      if (!startTimestamp) startTimestamp = timestamp;
-      
-      const elapsedReal = (timestamp - startTimestamp);
-      const elapsedVirtual = elapsedReal * speed; 
-      
-      const currentVirtualTimeAbsolute = startTime + elapsedVirtual;
-      const currentRelTime = elapsedVirtual;
-
-      setReplayTime(currentRelTime); 
-      
-      const progress = Math.min(elapsedVirtual / totalDuration, 1);
-      setReplayProgress(progress);
-
-      if (currentVirtualTimeAbsolute < firstMoveTime) {
-          setReplayCursor({ x: path.current[0].x, y: path.current[0].y });
-      } else {
-          let idx = 0;
-          for(let i=0; i<path.current.length; i++) {
-              if (path.current[i].t > currentVirtualTimeAbsolute) {
-                  idx = i;
-                  break;
-              }
-              idx = i;
-          }
-          
-          if (idx > 0 && idx < path.current.length) {
-              const p1 = path.current[idx - 1];
-              const p2 = path.current[idx];
-              if (p1 && p2) {
-                const segmentDuration = p2.t - p1.t;
-                const segmentProgress = segmentDuration > 0 ? (currentVirtualTimeAbsolute - p1.t) / segmentDuration : 0;
-                
-                setReplayCursor({
-                    x: p1.x + (p2.x - p1.x) * segmentProgress,
-                    y: p1.y + (p2.y - p1.y) * segmentProgress
-                });
-              }
-          } else if (path.current.length > 0) {
-              setReplayCursor({ x: path.current[path.current.length-1].x, y: path.current[path.current.length-1].y });
-          }
-      }
-
-      if (progress < 1) {
-        replayFrameRef.current = requestAnimationFrame(animate);
-      } else {
-        startTimestamp = null; 
-        setTimeout(() => {
-           replayFrameRef.current = requestAnimationFrame(animate);
-        }, 1000); 
-      }
-    };
-
-    cancelAnimationFrame(replayFrameRef.current);
-    replayFrameRef.current = requestAnimationFrame(animate);
+    setReplayTime(0);
+    setIsPlaying(true);
   };
 
   useEffect(() => {
-      return () => cancelAnimationFrame(replayFrameRef.current);
-  }, []);
+    if (gameState !== 'replay' || !isPlaying) {
+      lastReplayTimeRef.current = null;
+      cancelAnimationFrame(replayFrameRef.current);
+      return;
+    }
+
+    const animate = (time: number) => {
+      if (lastReplayTimeRef.current === null) {
+        lastReplayTimeRef.current = time;
+      }
+      
+      const delta = time - lastReplayTimeRef.current;
+      lastReplayTimeRef.current = time;
+
+      setReplayTime(prev => {
+        let next = prev + (delta * replaySpeed);
+        // Auto-loop with a small pause effect could be added here, but simple loop for now
+        if (next >= replayDuration) {
+           // For a player feel, maybe pause at end? Or Loop. 
+           // User said "recreates animations", often loops are better for analysis.
+           // But let's Pause at end so they can see the final state.
+           // Actually, loop is better for "visualizing". 
+           // Let's loop.
+           next = 0;
+        }
+        return next;
+      });
+
+      replayFrameRef.current = requestAnimationFrame(animate);
+    };
+
+    replayFrameRef.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(replayFrameRef.current);
+  }, [gameState, isPlaying, replaySpeed, replayDuration]);
+
+  // Handle Scrubbing
+  const handleSeek = (time: number) => {
+      setReplayTime(time);
+      // Optional: Pause when seeking?
+      // setIsPlaying(false); 
+  };
 
   return (
     <div className="min-h-screen bg-[#050505] text-white flex flex-col font-sans select-none touch-none overflow-hidden relative">
@@ -405,8 +382,10 @@ const App = () => {
         gameState={gameState}
         isHoldingA={isHoldingA}
         path={path.current}
-        replayCursor={replayCursor}
         results={results}
+        // Replay specific props
+        replayTime={replayTime}
+        goTime={goTimeRef.current}
       />
 
       {(gameState === 'results' || gameState === 'replay') && results && (
@@ -416,7 +395,7 @@ const App = () => {
             isAnalyzing={isAnalyzing}
             deviceInfo={deviceInfo}
             systemOverhead={systemOverhead}
-            onReplay={startReplay}
+            onReplay={initReplay}
             onReset={reset}
             onShowAnalysis={() => setGameState('analysis')}
           />
@@ -425,10 +404,14 @@ const App = () => {
       {gameState === 'replay' && results && (
         <ReplayOverlay 
            replayTime={replayTime}
+           duration={replayDuration}
            results={results}
-           replayProgress={replayProgress}
            replaySpeed={replaySpeed}
-           onStop={() => setGameState('results')}
+           isPlaying={isPlaying}
+           onTogglePlay={() => setIsPlaying(!isPlaying)}
+           onSeek={handleSeek}
+           onSpeedChange={setReplaySpeed}
+           onStop={() => { setIsPlaying(false); setGameState('results'); }}
         />
       )}
 

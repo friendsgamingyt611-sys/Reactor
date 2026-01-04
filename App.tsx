@@ -28,6 +28,8 @@ interface Results {
   accuracy: number; // in mm (distance from center)
   accuracyScore: number; // 0-100
   pathEfficiency: number; // percentage
+  totalDistanceMm: number;
+  displacementMm: number;
 }
 
 interface BiometricAnalysis {
@@ -421,10 +423,6 @@ const App = () => {
     
     // Accuracy Score Calculation
     // 0mm deviation = 100pts. 
-    // Target radius is 32px (~5mm on high DPI, varies). 
-    // Let's allow generous buffer for "Perfect".
-    // 10mm off center = 0 pts? No, that's too harsh.
-    // Let's say 25mm off center = 0 pts.
     const accuracyScore = Math.max(0, Math.min(100, 100 - (accuracyMm * 3)));
 
     const idealDistPx = Math.sqrt(Math.pow(points.b.x - points.a.x, 2) + Math.pow(points.b.y - points.a.y, 2));
@@ -433,6 +431,10 @@ const App = () => {
        actualDistPx += Math.sqrt(Math.pow(data[i].x - data[i-1].x, 2) + Math.pow(data[i].y - data[i-1].y, 2));
     }
     const pathEfficiency = actualDistPx > 0 ? Math.min(100, (idealDistPx / actualDistPx) * 100) : 0;
+    
+    // Extra Telemetry
+    const totalDistanceMm = (actualDistPx / ppm) * 1000;
+    const displacementMm = (idealDistPx / ppm) * 1000;
     
     const tier = peakV > 1.5 ? 'ELITE TWITCH' : 'STANDARD';
 
@@ -444,7 +446,9 @@ const App = () => {
       tier,
       accuracy: accuracyMm,
       accuracyScore,
-      pathEfficiency
+      pathEfficiency,
+      totalDistanceMm,
+      displacementMm
     };
 
     setResults(finalResults);

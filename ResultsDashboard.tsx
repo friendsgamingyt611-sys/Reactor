@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Activity, Brain, Zap, Loader2, RotateCcw, Target, TrendingUp, Map, Wind, Gauge, Trophy, Timer } from 'lucide-react';
+import { Play, Activity, Brain, Zap, Loader2, RotateCcw, Target, TrendingUp, Map, Wind, Gauge, Trophy, Timer, Route, Move } from 'lucide-react';
 
 interface ResultsDashboardProps {
   results: any;
@@ -99,30 +99,52 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({
         </div>
       </div>
 
-      {/* Main Metrics Grid */}
+      {/* Main Metrics Grid - 4x2 Layout for High Density */}
       <div className="grid grid-cols-2 gap-2 mb-4">
+        
         {/* Row 1: Time */}
-        <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
-          <p className="text-[9px] text-slate-500 uppercase font-black">Reaction Time</p>
-          <p className="text-2xl font-mono font-bold text-yellow-500 leading-none mt-1">{Math.round(results.reactionTime)}<span className="text-xs ml-1 text-slate-500">ms</span></p>
+        <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
+          <p className="text-[8px] text-slate-500 uppercase font-black flex items-center gap-1"><Timer size={10} /> Reaction Time</p>
+          <p className="text-xl font-mono font-bold text-yellow-500 leading-none mt-1">{Math.round(results.reactionTime)}<span className="text-[10px] ml-0.5 text-slate-500">ms</span></p>
         </div>
-        <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
-           <p className="text-[9px] text-slate-500 uppercase font-black">Movement Time</p>
-           <p className="text-2xl font-mono font-bold text-emerald-500 leading-none mt-1">{Math.round(results.travelTime)}<span className="text-xs ml-1 text-slate-500">ms</span></p>
+        <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
+           <p className="text-[8px] text-slate-500 uppercase font-black flex items-center gap-1"><Move size={10} /> Travel Time</p>
+           <p className="text-xl font-mono font-bold text-emerald-500 leading-none mt-1">{Math.round(results.travelTime)}<span className="text-[10px] ml-0.5 text-slate-500">ms</span></p>
         </div>
 
-        {/* Row 2: Kinematics & Accuracy */}
-        <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
-            <p className="text-[9px] text-slate-500 uppercase font-black flex items-center gap-1"><Wind size={10} /> Max Velocity</p>
-            <p className="text-xl font-mono font-bold text-cyan-400 leading-none mt-1">{results.peakV.toFixed(2)}<span className="text-xs ml-1 text-slate-500">m/s</span></p>
+        {/* Row 2: Kinematics */}
+        <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
+            <p className="text-[8px] text-slate-500 uppercase font-black flex items-center gap-1"><Wind size={10} /> Max Velocity</p>
+            <p className="text-lg font-mono font-bold text-cyan-400 leading-none mt-1">{results.peakV.toFixed(2)}<span className="text-[10px] ml-0.5 text-slate-500">m/s</span></p>
         </div>
-        <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
-            <p className="text-[9px] text-slate-500 uppercase font-black flex items-center gap-1"><Target size={10} /> Precision Score</p>
-            <div className="flex items-baseline gap-2">
-                <p className="text-xl font-mono font-bold text-purple-400 leading-none mt-1">{Math.round(results.accuracyScore)}<span className="text-xs ml-1 text-slate-500">/100</span></p>
-                <p className="text-[9px] text-slate-500">({results.accuracy.toFixed(1)}mm dev)</p>
+        <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
+            <p className="text-[8px] text-slate-500 uppercase font-black flex items-center gap-1"><Gauge size={10} /> Max Accel</p>
+            <p className="text-lg font-mono font-bold text-orange-400 leading-none mt-1">{results.peakA.toFixed(1)}<span className="text-[10px] ml-0.5 text-slate-500">m/s²</span></p>
+        </div>
+
+        {/* Row 3: Precision */}
+        <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
+            <p className="text-[8px] text-slate-500 uppercase font-black flex items-center gap-1"><Target size={10} /> Precision Score</p>
+            <div className="flex items-baseline gap-1">
+                <p className="text-lg font-mono font-bold text-purple-400 leading-none mt-1">{Math.round(results.accuracyScore)}</p>
+                <p className="text-[9px] text-slate-500">(-{results.accuracy.toFixed(1)}mm)</p>
             </div>
         </div>
+        <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
+            <p className="text-[8px] text-slate-500 uppercase font-black flex items-center gap-1"><TrendingUp size={10} /> Path Efficiency</p>
+            <p className="text-lg font-mono font-bold text-pink-400 leading-none mt-1">{results.pathEfficiency.toFixed(1)}<span className="text-[10px] ml-0.5 text-slate-500">%</span></p>
+        </div>
+
+        {/* Row 4: Geometry */}
+        <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
+            <p className="text-[8px] text-slate-500 uppercase font-black flex items-center gap-1"><Route size={10} /> Total Path</p>
+            <p className="text-lg font-mono font-bold text-white leading-none mt-1">{results.totalDistanceMm.toFixed(0)}<span className="text-[10px] ml-0.5 text-slate-500">mm</span></p>
+        </div>
+        <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
+            <p className="text-[8px] text-slate-500 uppercase font-black flex items-center gap-1"><Map size={10} /> Displacement</p>
+            <p className="text-lg font-mono font-bold text-slate-300 leading-none mt-1">{results.displacementMm.toFixed(0)}<span className="text-[10px] ml-0.5 text-slate-500">mm</span></p>
+        </div>
+
       </div>
 
       {/* 3-Tab Benchmark Hierarchy */}
@@ -162,7 +184,6 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({
                   let widthPct = 0;
                   if (rankTab === 'reaction') {
                       // For reaction, smaller is better. Invert visualization.
-                      // Max displayed is 500ms. If 20ms, width 100%. If 500ms, width 0%.
                       widthPct = Math.max(5, 100 - (item.val / activeData.max) * 100);
                   } else {
                       // For others, higher is better.

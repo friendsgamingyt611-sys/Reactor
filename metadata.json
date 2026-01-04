@@ -1,0 +1,5 @@
+{
+  "name": "StrikeLab Bio-Analysis",
+  "description": "A high-precision reaction time measuring tool with AI-powered biological motion analysis and slow-motion replay.",
+  "requestFramePermissions": []
+}

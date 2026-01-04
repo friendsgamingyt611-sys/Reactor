@@ -25,7 +25,8 @@ interface Results {
   peakV: number;
   peakA: number;
   tier: string;
-  accuracy: number; // in mm
+  accuracy: number; // in mm (distance from center)
+  accuracyScore: number; // 0-100
   pathEfficiency: number; // percentage
 }
 
@@ -41,6 +42,12 @@ interface HistoryItem {
   date: string;
   reactionTime: number;
   tier: string;
+}
+
+interface MissVector {
+  start: { x: number, y: number };
+  end: { x: number, y: number };
+  distanceMm: number;
 }
 
 // --- App Component ---
@@ -62,6 +69,7 @@ const App = () => {
   
   // Failure Replay Data
   const [violationPoint, setViolationPoint] = useState<{x: number, y: number} | null>(null);
+  const [missVector, setMissVector] = useState<MissVector | null>(null);
   
   // Player State
   const [isPlaying, setIsPlaying] = useState(false);
@@ -257,14 +265,50 @@ const App = () => {
     }
   };
 
+  const calculateMissVector = (lastPoint: {x: number, y: number}): MissVector | null => {
+      if (!points.b) return null;
+      
+      const targetRadius = 32; // Matches w-16 h-16
+      const dx = points.b.x - lastPoint.x;
+      const dy = points.b.y - lastPoint.y;
+      const distToCenter = Math.sqrt(dx*dx + dy*dy);
+      
+      // Calculate unit vector from Last Point -> Center
+      const ux = dx / distToCenter;
+      const uy = dy / distToCenter;
+      
+      // Calculate nearest point on the target perimeter
+      // Perimeter point is Center - (Radius * UnitVector)
+      // Wait, vector is Last->Center. So Center - Radius*Unit is closer to Last.
+      const px = points.b.x - (ux * targetRadius);
+      const py = points.b.y - (uy * targetRadius);
+      
+      const ppm = getPPM();
+      const missPx = distToCenter - targetRadius;
+      const distanceMm = Math.max(0, (missPx / ppm) * 1000);
+
+      return {
+          start: lastPoint,
+          end: { x: px, y: py },
+          distanceMm
+      };
+  };
+
   const failGame = (reason: string) => {
+      let lastPoint = { x: 0, y: 0 };
+      
       // Capture the exact point of violation if available
       if (path.current.length > 0) {
           const last = path.current[path.current.length - 1];
-          setViolationPoint({ x: last.x, y: last.y });
+          lastPoint = { x: last.x, y: last.y };
+          setViolationPoint(lastPoint);
       } else {
           setViolationPoint(null);
       }
+      
+      // Calculate Miss Vector
+      const mv = calculateMissVector(lastPoint);
+      setMissVector(mv);
       
       setGameState('failed');
       setFailReason(reason);
@@ -301,6 +345,7 @@ const App = () => {
           } else {
               setGameState('results'); 
               setViolationPoint(null);
+              setMissVector(null);
               analyzeResults(); 
           }
       }
@@ -373,6 +418,14 @@ const App = () => {
 
     const distPx = Math.sqrt(Math.pow(lastPoint.x - points.b.x, 2) + Math.pow(lastPoint.y - points.b.y, 2));
     const accuracyMm = (distPx / ppm) * 1000;
+    
+    // Accuracy Score Calculation
+    // 0mm deviation = 100pts. 
+    // Target radius is 32px (~5mm on high DPI, varies). 
+    // Let's allow generous buffer for "Perfect".
+    // 10mm off center = 0 pts? No, that's too harsh.
+    // Let's say 25mm off center = 0 pts.
+    const accuracyScore = Math.max(0, Math.min(100, 100 - (accuracyMm * 3)));
 
     const idealDistPx = Math.sqrt(Math.pow(points.b.x - points.a.x, 2) + Math.pow(points.b.y - points.a.y, 2));
     let actualDistPx = 0;
@@ -390,6 +443,7 @@ const App = () => {
       peakA,
       tier,
       accuracy: accuracyMm,
+      accuracyScore,
       pathEfficiency
     };
 
@@ -414,6 +468,7 @@ const App = () => {
     setAnalysis(null);
     setIsHoldingA(false);
     setViolationPoint(null);
+    setMissVector(null);
     path.current = [];
     setReplayTime(0);
     setIsPlaying(false);
@@ -496,6 +551,7 @@ const App = () => {
         replayTime={replayTime}
         goTime={goTimeRef.current}
         violationPoint={violationPoint}
+        missVector={missVector}
       />
 
       {/* --- OVERLAYS --- */}
@@ -519,6 +575,13 @@ const App = () => {
                      {failReason}
                   </p>
                   
+                  {missVector && (
+                      <div className="mb-8">
+                          <p className="text-[10px] text-red-300 font-mono uppercase tracking-widest mb-1">Missed By</p>
+                          <p className="text-3xl font-black text-white">{missVector.distanceMm.toFixed(1)}<span className="text-sm font-normal text-red-300 ml-1">mm</span></p>
+                      </div>
+                  )}
+
                   <div className="flex gap-4 justify-center">
                     <button 
                         onClick={() => initReplay(0.5)}

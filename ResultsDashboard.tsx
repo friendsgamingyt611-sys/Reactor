@@ -47,10 +47,15 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({
     ].sort((a, b) => b.val - a.val);
 
     // 3. Overall Score
-    // Formula: (1000 / TotalTime) * Multiplier.
-    // Example Elite: 1000 / (150+100) = 4. 4*25 = 100.
+    // Formula: Mixed weighted score.
+    // Time Score: Based on 1000ms base. 
+    // Accuracy Score: Direct 0-100.
     const totalTime = results.reactionTime + results.travelTime;
-    const scoreVal = Math.min(100, Math.round((1000 / totalTime) * 30)); 
+    const timeScore = Math.min(100, Math.round((1000 / totalTime) * 30));
+    const accuracyScore = results.accuracyScore || 0;
+    
+    // Weight: 70% Time, 30% Accuracy
+    const scoreVal = Math.round((timeScore * 0.7) + (accuracyScore * 0.3));
 
     const overallList = [
         { label: "Cybernetic", val: 99, icon: "🤖", color: "text-cyan-400", unit: "pts" },
@@ -106,14 +111,17 @@ const ResultsDashboard: React.FC<ResultsDashboardProps> = ({
            <p className="text-2xl font-mono font-bold text-emerald-500 leading-none mt-1">{Math.round(results.travelTime)}<span className="text-xs ml-1 text-slate-500">ms</span></p>
         </div>
 
-        {/* Row 2: Kinematics */}
+        {/* Row 2: Kinematics & Accuracy */}
         <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
             <p className="text-[9px] text-slate-500 uppercase font-black flex items-center gap-1"><Wind size={10} /> Max Velocity</p>
             <p className="text-xl font-mono font-bold text-cyan-400 leading-none mt-1">{results.peakV.toFixed(2)}<span className="text-xs ml-1 text-slate-500">m/s</span></p>
         </div>
         <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
-            <p className="text-[9px] text-slate-500 uppercase font-black flex items-center gap-1"><Gauge size={10} /> Max Accel</p>
-            <p className="text-xl font-mono font-bold text-orange-400 leading-none mt-1">{results.peakA.toFixed(1)}<span className="text-xs ml-1 text-slate-500">m/s²</span></p>
+            <p className="text-[9px] text-slate-500 uppercase font-black flex items-center gap-1"><Target size={10} /> Precision Score</p>
+            <div className="flex items-baseline gap-2">
+                <p className="text-xl font-mono font-bold text-purple-400 leading-none mt-1">{Math.round(results.accuracyScore)}<span className="text-xs ml-1 text-slate-500">/100</span></p>
+                <p className="text-[9px] text-slate-500">({results.accuracy.toFixed(1)}mm dev)</p>
+            </div>
         </div>
       </div>
 

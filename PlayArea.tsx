@@ -9,6 +9,12 @@ interface Point {
   a: number;
 }
 
+interface MissVector {
+  start: { x: number, y: number };
+  end: { x: number, y: number };
+  distanceMm: number;
+}
+
 interface PlayAreaProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
   onPointerDown: (e: React.PointerEvent) => void;
@@ -23,6 +29,7 @@ interface PlayAreaProps {
   replayTime?: number; // Optional, only for replay
   goTime?: number;     // Optional, only for replay
   violationPoint?: { x: number, y: number } | null;
+  missVector?: MissVector | null;
 }
 
 const PlayArea: React.FC<PlayAreaProps> = ({
@@ -38,7 +45,8 @@ const PlayArea: React.FC<PlayAreaProps> = ({
   results,
   replayTime = 0,
   goTime = 0,
-  violationPoint
+  violationPoint,
+  missVector
 }) => {
 
   const getVelocityColor = (v: number, maxV: number) => {
@@ -136,6 +144,30 @@ const PlayArea: React.FC<PlayAreaProps> = ({
           >
               <X size={24} strokeWidth={4} />
               <div className="absolute top-full left-1/2 -translate-x-1/2 whitespace-nowrap bg-red-900/80 text-white text-[8px] px-1 py-0.5 rounded font-mono">VIOLATION</div>
+          </div>
+      )}
+
+      {/* Miss Vector Line (Failure/Replay only) */}
+      {(gameState === 'failed' || gameState === 'replay') && missVector && (
+          <div className="absolute inset-0 pointer-events-none z-40">
+              <svg className="w-full h-full">
+                  {/* Dashed line from user's last point to nearest point on target perimeter */}
+                  <line 
+                      x1={missVector.start.x} y1={missVector.start.y} 
+                      x2={missVector.end.x} y2={missVector.end.y} 
+                      stroke="#ef4444" 
+                      strokeWidth="2" 
+                      strokeDasharray="4 4" 
+                  />
+                  
+                  {/* Distance Label */}
+                  <g transform={`translate(${(missVector.start.x + missVector.end.x)/2}, ${(missVector.start.y + missVector.end.y)/2})`}>
+                      <rect x="-30" y="-10" width="60" height="20" fill="black" rx="4" />
+                      <text x="0" y="4" textAnchor="middle" fill="white" fontSize="10" fontFamily="monospace" fontWeight="bold">
+                          {missVector.distanceMm.toFixed(1)}mm
+                      </text>
+                  </g>
+              </svg>
           </div>
       )}
 

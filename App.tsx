@@ -405,6 +405,8 @@ const App = () => {
            onSeek={handleSeek}
            onSpeedChange={setReplaySpeed}
            onStop={() => { setIsPlaying(false); setGameState('results'); }}
+           path={path.current}
+           startTime={goTimeRef.current}
         />
       )}
 

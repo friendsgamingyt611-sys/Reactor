@@ -96,24 +96,34 @@ const App = () => {
     if (!containerRef.current) return;
     const { width, height } = containerRef.current.getBoundingClientRect();
     const ppm = getPPM();
-    const padding = 80; 
     
-    const ax = Math.max(padding, Math.min(width - padding, width / 2));
-    const ay = Math.max(padding, Math.min(height - padding, height * 0.6));
+    // Increased top padding to avoid UI overlap with Header/Replay Controls
+    const paddingX = 40;
+    const paddingBottom = 100;
+    const paddingTop = 160; 
+    
+    // Position A (Start) - Bias towards top-center, but safe from UI
+    const ax = Math.max(paddingX, Math.min(width - paddingX, width / 2));
+    const ay = Math.max(paddingTop, Math.min(height - paddingBottom - 200, height * 0.4));
     const a = { x: ax, y: ay };
 
     const radiusMeters = 0.02; 
     const radiusPixels = radiusMeters * ppm;
     
-    let bestB = { x: ax, y: ay - radiusPixels }; 
+    // Position B (Target) - Randomly placed relative to A
+    let bestB = { x: ax, y: ay + 200 }; 
     let found = false;
     
-    for (let i = 0; i < 10; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const bx = ax + Math.cos(angle) * radiusPixels;
-        const by = ay + Math.sin(angle) * radiusPixels;
+    // Try to find a good spot for B that is on screen and reasonably far
+    for (let i = 0; i < 15; i++) {
+        const angle = Math.random() * Math.PI; // 0 to PI (mostly downwards movement preferred)
+        const dist = 150 + Math.random() * 300; // 150px to 450px distance
         
-        if (bx > 30 && bx < width - 30 && by > 30 && by < height - 30) {
+        const bx = ax + Math.cos(angle) * dist;
+        const by = ay + Math.sin(angle) * dist;
+        
+        // Ensure B is within bounds with padding
+        if (bx > paddingX && bx < width - paddingX && by > paddingTop && by < height - paddingBottom) {
             bestB = { x: bx, y: by };
             found = true;
             break;
@@ -121,10 +131,10 @@ const App = () => {
     }
     
     if (!found) {
-        const angleToCenter = Math.atan2((height/2) - ay, (width/2) - ax);
+        // Fallback: Place B directly below A
         bestB = {
-            x: ax + Math.cos(angleToCenter) * radiusPixels,
-            y: ay + Math.sin(angleToCenter) * radiusPixels
+            x: ax,
+            y: Math.min(height - paddingBottom, ay + 200)
         };
     }
 
@@ -233,7 +243,7 @@ const App = () => {
       `;
 
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-lite-latest",
+        model: "gemini-3-flash-preview",
         contents: prompt
       });
 

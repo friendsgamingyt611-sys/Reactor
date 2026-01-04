@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { GoogleGenAI } from "@google/genai";
-import { AlertTriangle, RotateCcw } from 'lucide-react';
+import { AlertTriangle, RotateCcw, PlayCircle } from 'lucide-react';
 import Header from './Header';
 import PlayArea from './PlayArea';
 import ResultsDashboard from './ResultsDashboard';
@@ -8,6 +8,7 @@ import ReplayOverlay from './ReplayOverlay';
 import PathAnalysis from './PathAnalysis';
 import InfoSection from './InfoSection';
 import TutorialOverlay from './TutorialOverlay';
+import HistorySection from './HistorySection';
 
 // --- Types ---
 interface Point {
@@ -35,6 +36,13 @@ interface BiometricAnalysis {
   summary: string;
 }
 
+interface HistoryItem {
+  id: number;
+  date: string;
+  reactionTime: number;
+  tier: string;
+}
+
 // --- App Component ---
 const App = () => {
   const [gameState, setGameState] = useState<'idle' | 'holding' | 'active' | 'results' | 'replay' | 'analysis' | 'failed'>('idle'); 
@@ -52,6 +60,9 @@ const App = () => {
   const [analysis, setAnalysis] = useState<BiometricAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   
+  // Failure Replay Data
+  const [violationPoint, setViolationPoint] = useState<{x: number, y: number} | null>(null);
+  
   // Player State
   const [isPlaying, setIsPlaying] = useState(false);
   const [replaySpeed, setReplaySpeed] = useState(1.0);
@@ -61,6 +72,8 @@ const App = () => {
   // New UI States
   const [showInfo, setShowInfo] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
 
   const path = useRef<Point[]>([]); 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -69,12 +82,22 @@ const App = () => {
   const replayFrameRef = useRef<number>(0);
   const lastReplayTimeRef = useRef<number | null>(null);
 
-  // 1. Initial Setup & Calibration
+  // 1. Initial Setup & Calibration & History Load
   useEffect(() => {
     // Check for first time visitor
     const hasSeenTutorial = localStorage.getItem('strikeLab_tutorial_seen');
     if (!hasSeenTutorial) {
       setShowTutorial(true);
+    }
+
+    // Load History
+    const savedHistory = localStorage.getItem('strikeLab_history');
+    if (savedHistory) {
+        try {
+            setHistory(JSON.parse(savedHistory));
+        } catch (e) {
+            console.error("Corrupt history data");
+        }
     }
 
     const runCalibration = () => {
@@ -104,6 +127,11 @@ const App = () => {
   const finishTutorial = () => {
     setShowTutorial(false);
     localStorage.setItem('strikeLab_tutorial_seen', 'true');
+  };
+
+  const clearHistory = () => {
+      setHistory([]);
+      localStorage.removeItem('strikeLab_history');
   };
 
   const getPPM = () => {
@@ -230,10 +258,19 @@ const App = () => {
   };
 
   const failGame = (reason: string) => {
+      // Capture the exact point of violation if available
+      if (path.current.length > 0) {
+          const last = path.current[path.current.length - 1];
+          setViolationPoint({ x: last.x, y: last.y });
+      } else {
+          setViolationPoint(null);
+      }
+      
       setGameState('failed');
       setFailReason(reason);
       setIsHoldingA(false);
       clearTimeout(startTimeoutRef.current);
+      setResults(null); // Clear previous results
   };
 
   const handlePointerLeave = () => {
@@ -263,6 +300,7 @@ const App = () => {
               failGame("MISSED TARGET");
           } else {
               setGameState('results'); 
+              setViolationPoint(null);
               analyzeResults(); 
           }
       }
@@ -342,19 +380,32 @@ const App = () => {
        actualDistPx += Math.sqrt(Math.pow(data[i].x - data[i-1].x, 2) + Math.pow(data[i].y - data[i-1].y, 2));
     }
     const pathEfficiency = actualDistPx > 0 ? Math.min(100, (idealDistPx / actualDistPx) * 100) : 0;
+    
+    const tier = peakV > 1.5 ? 'ELITE TWITCH' : 'STANDARD';
 
     const finalResults = {
       reactionTime,
       travelTime,
       peakV,
       peakA,
-      tier: peakV > 1.5 ? 'ELITE TWITCH' : 'STANDARD',
+      tier,
       accuracy: accuracyMm,
       pathEfficiency
     };
 
     setResults(finalResults);
     generateBioAnalysis(finalResults);
+
+    // Save to History
+    const newHistoryItem: HistoryItem = {
+        id: Date.now(),
+        date: new Date().toISOString(),
+        reactionTime: finalResults.reactionTime,
+        tier: tier
+    };
+    const updatedHistory = [...history, newHistoryItem];
+    setHistory(updatedHistory);
+    localStorage.setItem('strikeLab_history', JSON.stringify(updatedHistory));
   };
 
   const reset = () => {
@@ -362,6 +413,7 @@ const App = () => {
     setResults(null);
     setAnalysis(null);
     setIsHoldingA(false);
+    setViolationPoint(null);
     path.current = [];
     setReplayTime(0);
     setIsPlaying(false);
@@ -376,7 +428,7 @@ const App = () => {
     
     const startTime = goTimeRef.current;
     const endTime = path.current[path.current.length - 1].t;
-    const duration = endTime - startTime;
+    const duration = Math.max(100, endTime - startTime); // Ensure minimum duration
     setReplayDuration(duration);
     
     setReplayTime(0);
@@ -427,6 +479,7 @@ const App = () => {
         systemOverhead={systemOverhead} 
         deviceInfo={deviceInfo} 
         onOpenInfo={() => setShowInfo(true)}
+        onOpenHistory={() => setShowHistory(true)}
       />
 
       <PlayArea 
@@ -442,6 +495,7 @@ const App = () => {
         results={results}
         replayTime={replayTime}
         goTime={goTimeRef.current}
+        violationPoint={violationPoint}
       />
 
       {/* --- OVERLAYS --- */}
@@ -451,8 +505,11 @@ const App = () => {
 
       {/* 2. Info Section (Manual) */}
       {showInfo && <InfoSection onClose={() => setShowInfo(false)} />}
+      
+      {/* 3. History Section (Manual) */}
+      {showHistory && <HistorySection history={history} onClose={() => setShowHistory(false)} onClear={clearHistory} />}
 
-      {/* 3. Failure Screen */}
+      {/* 4. Failure Screen */}
       {gameState === 'failed' && (
           <div className="absolute inset-0 bg-red-900/90 backdrop-blur-xl z-50 flex items-center justify-center p-8">
               <div className="text-center">
@@ -461,20 +518,30 @@ const App = () => {
                   <p className="text-red-200 font-mono text-lg mb-8 uppercase tracking-widest border border-red-500/50 p-2 inline-block">
                      {failReason}
                   </p>
-                  <p className="text-sm text-red-200/60 max-w-sm mx-auto mb-8">
-                      Fair Play Protocol: You must wait for the target and strike accurately without leaving the sensor area.
+                  
+                  <div className="flex gap-4 justify-center">
+                    <button 
+                        onClick={() => initReplay(0.5)}
+                        className="bg-red-800/50 border border-red-400/30 text-white px-6 py-3 rounded-full font-bold uppercase tracking-widest hover:bg-red-800/70 transition-colors flex items-center gap-2"
+                    >
+                        <PlayCircle size={16} /> Analyze Failure
+                    </button>
+                    <button 
+                        onClick={reset}
+                        className="bg-white text-red-900 px-8 py-3 rounded-full font-bold uppercase tracking-widest hover:scale-105 transition-transform flex items-center gap-2"
+                    >
+                        <RotateCcw size={16} /> Retry
+                    </button>
+                  </div>
+                  
+                  <p className="text-sm text-red-200/60 max-w-sm mx-auto mt-8">
+                      Fair Play Protocol: Review your replay to see exactly where the violation occurred.
                   </p>
-                  <button 
-                    onClick={reset}
-                    className="bg-white text-red-900 px-8 py-3 rounded-full font-bold uppercase tracking-widest hover:scale-105 transition-transform flex items-center gap-2 mx-auto"
-                  >
-                    <RotateCcw size={16} /> Retry
-                  </button>
               </div>
           </div>
       )}
 
-      {/* 4. Results */}
+      {/* 5. Results */}
       {gameState === 'results' && results && (
           <ResultsDashboard 
             results={results}
@@ -488,8 +555,8 @@ const App = () => {
           />
       )}
 
-      {/* 5. Replay */}
-      {gameState === 'replay' && results && (
+      {/* 6. Replay (Works for Success AND Failure) */}
+      {gameState === 'replay' && (
         <ReplayOverlay 
            replayTime={replayTime}
            duration={replayDuration}
@@ -499,13 +566,13 @@ const App = () => {
            onTogglePlay={() => setIsPlaying(!isPlaying)}
            onSeek={handleSeek}
            onSpeedChange={setReplaySpeed}
-           onStop={() => { setIsPlaying(false); setGameState('results'); }}
+           onStop={() => { setIsPlaying(false); setGameState(results ? 'results' : 'failed'); }}
            path={path.current}
            startTime={goTimeRef.current}
         />
       )}
 
-      {/* 6. Analysis */}
+      {/* 7. Analysis */}
       {gameState === 'analysis' && results && (
           <PathAnalysis 
               path={path.current}

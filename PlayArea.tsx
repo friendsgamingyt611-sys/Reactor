@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { X } from 'lucide-react';
 
 interface Point {
   t: number;
@@ -21,6 +22,7 @@ interface PlayAreaProps {
   results: any;
   replayTime?: number; // Optional, only for replay
   goTime?: number;     // Optional, only for replay
+  violationPoint?: { x: number, y: number } | null;
 }
 
 const PlayArea: React.FC<PlayAreaProps> = ({
@@ -35,7 +37,8 @@ const PlayArea: React.FC<PlayAreaProps> = ({
   path,
   results,
   replayTime = 0,
-  goTime = 0
+  goTime = 0,
+  violationPoint
 }) => {
 
   const getVelocityColor = (v: number, maxV: number) => {
@@ -81,7 +84,7 @@ const PlayArea: React.FC<PlayAreaProps> = ({
     >
       {/* Origin A - Always visible */}
       <div 
-        className={`absolute w-32 h-32 -ml-16 -mt-16 rounded-full flex items-center justify-center transition-all duration-300 ${['results', 'replay', 'analysis'].includes(gameState) ? 'opacity-20 grayscale' : 'opacity-100'}`}
+        className={`absolute w-32 h-32 -ml-16 -mt-16 rounded-full flex items-center justify-center transition-all duration-300 ${['results', 'replay', 'analysis', 'failed'].includes(gameState) ? 'opacity-20 grayscale' : 'opacity-100'}`}
         style={{ left: points.a.x, top: points.a.y }}
       >
         <div className={`absolute inset-0 rounded-full transition-all duration-500 ${isHoldingA ? 'bg-amber-500/20 blur-2xl scale-125' : 'bg-blue-500/5 blur-xl scale-100'}`} />
@@ -91,11 +94,11 @@ const PlayArea: React.FC<PlayAreaProps> = ({
         </div>
       </div>
 
-      {/* Target B - Always visible in Replay/Results */}
+      {/* Target B - Always visible in Replay/Results/Failed */}
       <div 
         className={`absolute w-16 h-16 -ml-8 -mt-8 rounded-full border-2 border-red-500/80 flex items-center justify-center transition-all duration-0 
         ${gameState === 'active' || gameState === 'analysis' ? 'opacity-100 scale-100' : ''}
-        ${gameState === 'replay' || gameState === 'results' ? 'opacity-100 scale-100' : ''}
+        ${gameState === 'replay' || gameState === 'results' || gameState === 'failed' ? 'opacity-100 scale-100' : ''}
         ${gameState === 'idle' || gameState === 'holding' ? 'opacity-0 scale-0' : ''}
         shadow-[0_0_30px_rgba(239,68,68,0.6)]`}
         style={{ left: points.b.x, top: points.b.y }}
@@ -125,6 +128,17 @@ const PlayArea: React.FC<PlayAreaProps> = ({
          </svg>
       )}
 
+      {/* Violation Marker */}
+      {(gameState === 'failed' || gameState === 'replay') && violationPoint && (
+          <div 
+              className="absolute pointer-events-none z-50 text-red-500 animate-pulse"
+              style={{ left: violationPoint.x - 12, top: violationPoint.y - 12 }}
+          >
+              <X size={24} strokeWidth={4} />
+              <div className="absolute top-full left-1/2 -translate-x-1/2 whitespace-nowrap bg-red-900/80 text-white text-[8px] px-1 py-0.5 rounded font-mono">VIOLATION</div>
+          </div>
+      )}
+
       {/* Replay Elements - Recreating original movement */}
       {gameState === 'replay' && replayData && (
           <>
@@ -147,7 +161,7 @@ const PlayArea: React.FC<PlayAreaProps> = ({
                             key={i}
                             x1={prev.x} y1={prev.y}
                             x2={p.x} y2={p.y}
-                            stroke={getVelocityColor(p.v, results.peakV)}
+                            stroke={getVelocityColor(p.v, results?.peakV || 1.5)}
                             strokeWidth={3 + (p.v * 6)} 
                             strokeLinecap="round"
                             opacity={1}

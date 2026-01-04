@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Activity, Clock, Play, Pause, Square, Rewind, FastForward, Gauge, Wind } from 'lucide-react';
+import { Activity, Clock, Play, Pause, Square, Rewind, FastForward, Gauge, Wind, AlertTriangle } from 'lucide-react';
 
 interface Point {
   t: number;
@@ -12,7 +12,7 @@ interface Point {
 interface ReplayOverlayProps {
   replayTime: number;
   duration: number;
-  results: any;
+  results: any | null;
   replaySpeed: number;
   isPlaying: boolean;
   onTogglePlay: () => void;
@@ -51,6 +51,8 @@ const ReplayOverlay: React.FC<ReplayOverlayProps> = ({
   }, [replayTime, startTime, path]);
 
   const getBioPhaseText = () => {
+      if (!results) return "VIOLATION ANALYSIS";
+
       const reactionMs = results.reactionTime;
       const t = replayTime;
       
@@ -63,6 +65,8 @@ const ReplayOverlay: React.FC<ReplayOverlayProps> = ({
   };
 
   const getBioPhaseDesc = () => {
+    if (!results) return "Analyzing failure path vector.";
+
     const reactionMs = results.reactionTime;
     const t = replayTime;
     
@@ -81,7 +85,7 @@ const ReplayOverlay: React.FC<ReplayOverlayProps> = ({
           <div className="w-full max-w-2xl px-4 pointer-events-auto flex flex-col gap-2">
             
             {/* Main Control Bar */}
-            <div className="bg-[#111]/90 backdrop-blur-md border border-white/10 rounded-2xl p-3 shadow-2xl flex items-center gap-4">
+            <div className={`backdrop-blur-md border rounded-2xl p-3 shadow-2xl flex items-center gap-4 ${results ? 'bg-[#111]/90 border-white/10' : 'bg-red-950/90 border-red-500/30'}`}>
                 
                  {/* Play/Pause */}
                  <button onClick={onTogglePlay} className="text-white hover:text-blue-400 transition-colors shrink-0">
@@ -101,17 +105,21 @@ const ReplayOverlay: React.FC<ReplayOverlayProps> = ({
                        
                        {/* Custom Track */}
                        <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden relative">
-                           {/* Reaction Phase */}
-                           <div className="absolute h-full bg-yellow-500/30" style={{ width: `${(results.reactionTime / duration) * 100}%` }} />
-                           {/* Movement Phase */}
-                           <div className="absolute h-full bg-emerald-500/30" style={{ left: `${(results.reactionTime / duration) * 100}%`, right: 0 }} />
+                           {results && (
+                               <>
+                                   {/* Reaction Phase */}
+                                   <div className="absolute h-full bg-yellow-500/30" style={{ width: `${(results.reactionTime / duration) * 100}%` }} />
+                                   {/* Movement Phase */}
+                                   <div className="absolute h-full bg-emerald-500/30" style={{ left: `${(results.reactionTime / duration) * 100}%`, right: 0 }} />
+                               </>
+                           )}
                            
                            {/* Progress Fill */}
-                           <div className="h-full bg-blue-500 relative" style={{ width: `${(replayTime / duration) * 100}%` }} />
+                           <div className={`h-full relative ${results ? 'bg-blue-500' : 'bg-red-500'}`} style={{ width: `${(replayTime / duration) * 100}%` }} />
                        </div>
                        
                        {/* Thumb */}
-                       <div className="absolute h-3 w-3 bg-white rounded-full shadow-lg pointer-events-none border-2 border-blue-500 top-1.5" style={{ left: `calc(${(replayTime / duration) * 100}% - 6px)` }} />
+                       <div className={`absolute h-3 w-3 bg-white rounded-full shadow-lg pointer-events-none border-2 top-1.5 ${results ? 'border-blue-500' : 'border-red-500'}`} style={{ left: `calc(${(replayTime / duration) * 100}% - 6px)` }} />
                  </div>
 
                  {/* Speed Toggle */}
@@ -143,9 +151,9 @@ const ReplayOverlay: React.FC<ReplayOverlayProps> = ({
                  </div>
 
                  {/* Phase Bio-Metrics (Visible primarily in slow mo, or always if space permits) */}
-                 <div className={`bg-black/80 backdrop-blur-md border border-emerald-500/30 rounded-xl p-3 flex flex-col justify-center transition-opacity duration-300 ${replaySpeed < 0.5 ? 'opacity-100' : 'opacity-80'}`}>
-                      <div className="text-[8px] text-emerald-400 font-mono uppercase mb-0.5 flex items-center gap-1">
-                          <Activity size={8} /> {getBioPhaseText()}
+                 <div className={`bg-black/80 backdrop-blur-md border rounded-xl p-3 flex flex-col justify-center transition-opacity duration-300 ${results ? 'border-emerald-500/30' : 'border-red-500/30'} ${replaySpeed < 0.5 ? 'opacity-100' : 'opacity-80'}`}>
+                      <div className={`text-[8px] font-mono uppercase mb-0.5 flex items-center gap-1 ${results ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {results ? <Activity size={8} /> : <AlertTriangle size={8} />} {getBioPhaseText()}
                       </div>
                       <div className="text-[9px] text-slate-300 leading-tight">
                           {getBioPhaseDesc()}
